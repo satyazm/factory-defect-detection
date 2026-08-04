@@ -9,7 +9,8 @@ from pathlib import Path
 
 from ultralytics import YOLO
 
-DATA_YAML = Path(__file__).resolve().parent.parent / "dataset" / "data.yaml"
+from _data_config import build_absolute_data_yaml
+
 RUNS_DIR = Path(__file__).resolve().parent.parent / "models" / "yolov8"
 
 
@@ -25,7 +26,7 @@ def main():
 
     model = YOLO(args.model)
     model.train(
-        data=str(DATA_YAML),
+        data=build_absolute_data_yaml(),
         epochs=args.epochs,
         imgsz=args.imgsz,
         batch=args.batch,

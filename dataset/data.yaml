@@ -1,5 +1,15 @@
 # YOLO dataset config for NEU-DET (steel surface defects)
-# Populate dataset/train, dataset/validation, dataset/test using utils/download_dataset.py first.
+# Populate dataset/train, dataset/validation, dataset/test using
+# preprocessing/voc_to_yolo.py or utils/download_dataset.py first.
+#
+# NOTE: training/train.py and training/evaluate.py don't read this file
+# directly — they generate a temp copy with absolute paths via
+# training/_data_config.py, because ultralytics resolves the relative
+# `path` below against the CURRENT WORKING DIRECTORY at runtime, not
+# against this file's own location (see
+# https://github.com/ultralytics/ultralytics/issues/9503). This file is
+# kept for reference and for manual `yolo detect train data=...` runs
+# from the repo root, where `path: .` happens to resolve correctly.
 
 path: .
 train: train/images

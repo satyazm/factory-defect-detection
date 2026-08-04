@@ -6,11 +6,10 @@ Usage:
     python training/evaluate.py --weights models/yolov8/defect_detector/weights/best.pt --split test
 """
 import argparse
-from pathlib import Path
 
 from ultralytics import YOLO
 
-DATA_YAML = Path(__file__).resolve().parent.parent / "dataset" / "data.yaml"
+from _data_config import build_absolute_data_yaml
 
 
 def main():
@@ -21,7 +20,7 @@ def main():
     args = parser.parse_args()
 
     model = YOLO(args.weights)
-    metrics = model.val(data=str(DATA_YAML), split=args.split, imgsz=args.imgsz)
+    metrics = model.val(data=build_absolute_data_yaml(), split=args.split, imgsz=args.imgsz)
 
     print("\n--- Summary ---")
     print(f"mAP50:    {metrics.box.map50:.4f}")
