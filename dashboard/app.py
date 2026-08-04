@@ -4,6 +4,11 @@ Streamlit dashboard: live detection feed + production stats.
 Panel 1 — known defects (YOLO, Module 1): "what type of defect is this?"
 Panel 2 — unknown anomalies (PatchCore, Module 2): "does this look abnormal at all?"
 
+Each panel has its own video source, since the two models were trained
+on completely different image domains (NEU-DET steel surfaces vs.
+MVTec bottle photos) — a source that suits one panel is meaningless (or
+actively misleading) for the other.
+
 Usage:
     streamlit run dashboard/app.py
 """
@@ -27,7 +32,14 @@ from database.db import (
     recent_anomalies,
     recent_detections,
 )
-from inference.video_source import open_capture
+from inference.video_source import guess_ground_truth_label, open_capture
+
+# Ground-truth labels are guessed from filenames of this repo's own demo
+# folders (preprocessing/voc_to_yolo.py's NEU-DET output; the flattened
+# MVTec bottle test split) — meaningless for other sources, in which
+# case guess_ground_truth_label just returns None and nothing shows.
+NEU_DET_CLASSES = ["crazing", "inclusion", "patches", "pitted_surface", "rolled-in_scale", "scratches"]
+MVTEC_BOTTLE_CLASSES = ["good", "broken_small", "broken_large", "contamination"]
 
 st.set_page_config(page_title="Factory Defect Detection", layout="wide")
 init_db()
@@ -36,19 +48,25 @@ st.title("Factory Defect Detection — Live Dashboard")
 
 with st.sidebar:
     st.header("Configuration")
+
     enable_known = st.checkbox("Panel 1: known-defect detection (YOLO)", value=True)
     yolo_weights = st.text_input(
         "YOLO weights", str(REPO_ROOT / "models/yolov8/defect_detector/weights/best.pt")
     )
+    known_source = st.text_input(
+        "Panel 1 video source (webcam / file / RTSP / folder)",
+        str(REPO_ROOT / "dataset/test/images"),
+    )
+
     enable_anomaly = st.checkbox("Panel 2: unknown-anomaly detection (PatchCore)", value=True)
     patchcore_weights = st.text_input(
         "PatchCore weights", str(REPO_ROOT / "models/patchcore/bottle/weights/torch/model.pt")
     )
-
-    source = st.text_input(
-        "Video source (webcam index / file / RTSP URL / folder of images)",
-        str(REPO_ROOT / "dataset/test/images"),
+    anomaly_source = st.text_input(
+        "Panel 2 video source (webcam / file / RTSP / folder)",
+        str(REPO_ROOT / "dataset/mvtec_ad/bottle/test_flat"),
     )
+
     image_delay = st.number_input(
         "Seconds per image (folder sources only)", min_value=0.1, max_value=10.0, value=1.5, step=0.1
     )
@@ -61,11 +79,13 @@ col_known, col_anomaly = st.columns(2)
 with col_known:
     st.subheader("Panel 1 — Known Defects (YOLO)")
     known_alert_placeholder = st.empty()
+    known_gt_placeholder = st.empty()
     known_frame_placeholder = st.empty()
 
 with col_anomaly:
     st.subheader("Panel 2 — Unknown Anomalies (PatchCore)")
     anomaly_alert_placeholder = st.empty()
+    anomaly_gt_placeholder = st.empty()
     anomaly_original_col, anomaly_heatmap_col = st.columns(2)
     with anomaly_original_col:
         st.caption("Original")
@@ -104,49 +124,78 @@ if run_stream:
         st.warning("Enable at least one panel in the sidebar to start streaming.")
         st.stop()
 
-    cap = open_capture(source, image_folder_delay_seconds=image_delay)
-    if not cap.isOpened():
-        st.error(f"Could not open video source: {source}")
-        st.stop()
+    known_cap = None
+    anomaly_cap = None
+
+    if known_detector:
+        known_cap = open_capture(known_source, image_folder_delay_seconds=image_delay)
+        if not known_cap.isOpened():
+            st.error(f"Could not open Panel 1 video source: {known_source}")
+            st.stop()
+
+    if anomaly_detector:
+        anomaly_cap = open_capture(anomaly_source, image_folder_delay_seconds=image_delay)
+        if not anomaly_cap.isOpened():
+            st.error(f"Could not open Panel 2 video source: {anomaly_source}")
+            st.stop()
 
     prev_time = time.time()
     while run_stream:
-        ok, frame = cap.read()
-        if not ok:
-            st.warning("Stream ended or frame grab failed.")
+        known_ok = anomaly_ok = False
+
+        if known_cap:
+            known_ok, known_frame = known_cap.read()
+            if known_ok:
+                known_result = known_detector.predict(known_frame)
+                for det in known_result["detections"]:
+                    log_detection(det["class_name"], det["confidence"], det["bbox"], camera_id=camera_id)
+
+                gt = guess_ground_truth_label(getattr(known_cap, "last_path", None), NEU_DET_CLASSES)
+                known_gt_placeholder.caption(f"Ground truth: {gt}" if gt else "")
+
+                if known_result["detections"]:
+                    labels = ", ".join(f"{d['class_name']} ({d['confidence']:.0%})" for d in known_result["detections"])
+                    known_alert_placeholder.error(f"⚠️ Defect detected: {labels}")
+                else:
+                    known_alert_placeholder.success("✅ No known defects in current frame")
+
+                known_frame_placeholder.image(cv2.cvtColor(known_result["annotated"], cv2.COLOR_BGR2RGB), channels="RGB")
+            else:
+                known_alert_placeholder.warning("Panel 1 stream ended or frame grab failed.")
+
+        if anomaly_cap:
+            anomaly_ok, anomaly_frame = anomaly_cap.read()
+            if anomaly_ok:
+                anomaly_result = anomaly_detector.predict(anomaly_frame)
+                log_anomaly(anomaly_result["score"], anomaly_result["is_anomalous"], camera_id=camera_id)
+
+                gt = guess_ground_truth_label(getattr(anomaly_cap, "last_path", None), MVTEC_BOTTLE_CLASSES)
+                anomaly_gt_placeholder.caption(f"Ground truth: {gt}" if gt else "")
+
+                if anomaly_result["is_anomalous"]:
+                    anomaly_alert_placeholder.error(f"🔴 Abnormal — score {anomaly_result['score']:.2f}")
+                else:
+                    anomaly_alert_placeholder.success(f"🟢 Normal — score {anomaly_result['score']:.2f}")
+
+                anomaly_original_placeholder.image(cv2.cvtColor(anomaly_frame, cv2.COLOR_BGR2RGB), channels="RGB")
+                anomaly_frame_placeholder.image(cv2.cvtColor(anomaly_result["heatmap"], cv2.COLOR_BGR2RGB), channels="RGB")
+            else:
+                anomaly_alert_placeholder.warning("Panel 2 stream ended or frame grab failed.")
+
+        active_results = [ok for cap, ok in ((known_cap, known_ok), (anomaly_cap, anomaly_ok)) if cap]
+        if active_results and not any(active_results):
+            st.warning("Video source(s) ended.")
             break
-
-        if known_detector:
-            known_result = known_detector.predict(frame)
-            for det in known_result["detections"]:
-                log_detection(det["class_name"], det["confidence"], det["bbox"], camera_id=camera_id)
-
-            if known_result["detections"]:
-                labels = ", ".join(f"{d['class_name']} ({d['confidence']:.0%})" for d in known_result["detections"])
-                known_alert_placeholder.error(f"⚠️ Defect detected: {labels}")
-            else:
-                known_alert_placeholder.success("✅ No known defects in current frame")
-
-            known_frame_placeholder.image(cv2.cvtColor(known_result["annotated"], cv2.COLOR_BGR2RGB), channels="RGB")
-
-        if anomaly_detector:
-            anomaly_result = anomaly_detector.predict(frame)
-            log_anomaly(anomaly_result["score"], anomaly_result["is_anomalous"], camera_id=camera_id)
-
-            if anomaly_result["is_anomalous"]:
-                anomaly_alert_placeholder.error(f"🔴 Abnormal — score {anomaly_result['score']:.2f}")
-            else:
-                anomaly_alert_placeholder.success(f"🟢 Normal — score {anomaly_result['score']:.2f}")
-
-            anomaly_original_placeholder.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), channels="RGB")
-            anomaly_frame_placeholder.image(cv2.cvtColor(anomaly_result["heatmap"], cv2.COLOR_BGR2RGB), channels="RGB")
 
         now = time.time()
         fps = 1.0 / max(now - prev_time, 1e-6)
         prev_time = now
         fps_placeholder.caption(f"FPS: {fps:.1f}")
 
-    cap.release()
+    if known_cap:
+        known_cap.release()
+    if anomaly_cap:
+        anomaly_cap.release()
 else:
     st.info("Toggle 'Start live feed' in the sidebar to begin streaming.")
 

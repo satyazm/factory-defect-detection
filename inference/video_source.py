@@ -29,6 +29,7 @@ class ImageFolderCapture:
         self.delay_seconds = delay_seconds
         self._index = 0
         self._last_read_time = 0.0
+        self.last_path: Path | None = None
 
     def isOpened(self) -> bool:
         return len(self.paths) > 0
@@ -44,6 +45,7 @@ class ImageFolderCapture:
         path = self.paths[self._index]
         self._index = (self._index + 1) % len(self.paths)
         self._last_read_time = time.time()
+        self.last_path = path
 
         frame = cv2.imread(str(path))
         return frame is not None, frame
@@ -57,3 +59,21 @@ def open_capture(source: str, image_folder_delay_seconds: float = 1.5):
         return ImageFolderCapture(source, delay_seconds=image_folder_delay_seconds)
     parsed = int(source) if source.isdigit() else source
     return cv2.VideoCapture(parsed)
+
+
+def guess_ground_truth_label(path: Path | None, candidates: list[str]) -> str | None:
+    """
+    Best-effort ground truth from a demo image's filename, e.g.
+    "scratches_241.jpg" -> "scratches", "broken_large_003.png" ->
+    "broken_large". Only meaningful for this repo's own demo folders
+    (preprocessing/voc_to_yolo.py's NEU-DET output, or the flattened
+    MVTec bottle test split) — returns None for anything else rather
+    than guessing wrong.
+    """
+    if path is None:
+        return None
+    stem = path.stem
+    for candidate in sorted(candidates, key=len, reverse=True):
+        if stem.startswith(candidate):
+            return candidate
+    return None
