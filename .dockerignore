@@ -1,0 +1,21 @@
+.venv/
+.git/
+.github/
+__pycache__/
+*.pyc
+.DS_Store
+
+# datasets and trained weights are large and machine-specific — mount
+# them as volumes at `docker run` time instead of baking into the image
+dataset/
+models/
+
+# runtime state, not build-time
+database/*.db
+reports/*.png
+reports/*.csv
+
+# not needed inside the container
+kaggle/
+*.md
+.claude/

@@ -1,5 +1,5 @@
-ultralytics>=8.3.0
-anomalib>=2.6.0
+ultralytics==8.4.115
+anomalib==2.6.0
 opencv-python>=4.9.0
 albumentations>=1.4.0
 numpy>=1.26.0
