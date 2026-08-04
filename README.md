@@ -168,6 +168,18 @@ to converge (it builds a coreset feature memory bank in one pass), so
 this finishes fast even on CPU, unlike YOLO training. The exported model
 lands at `models/patchcore/bottle/weights/torch/model.pt`.
 
+**Or on Kaggle (free GPU):** upload
+[kaggle/train_patchcore_kaggle.ipynb](kaggle/train_patchcore_kaggle.ipynb)
+as a new Kaggle notebook. It clones the repo with a `GITHUB_TOKEN` Kaggle
+Secret (same pattern as the YOLO notebook) and runs the actual
+`training/train_patchcore.py`/`evaluate_patchcore.py` scripts — no
+duplicated logic to drift out of sync. Unlike NEU-DET, MVTec AD needs no
+manual download or attached Input: anomalib fetches the category archive
+directly from the official mirror at train time, given internet access.
+Enable the `GITHUB_TOKEN` secret, set accelerator to GPU, internet on,
+run all cells, then download `model.pt` from the Output pane and drop it
+into `models/patchcore/bottle/weights/torch/model.pt` locally (gitignored).
+
 ### 3. Evaluate
 
 ```bash
@@ -261,7 +273,7 @@ factory-defect-detection/
 │   └── combined_pipeline.py       # both modules, live
 ├── dashboard/                     # app.py (Streamlit, two panels)
 ├── database/                      # db.py (SQLite/SQLAlchemy)
-├── kaggle/                        # train_yolo_kaggle.ipynb (self-contained GPU training)
+├── kaggle/                        # train_yolo_kaggle.ipynb, train_patchcore_kaggle.ipynb (GPU training)
 ├── reports/                       # generated analytics output
 └── utils/                         # download_dataset.py (NEU-DET)
 ```
