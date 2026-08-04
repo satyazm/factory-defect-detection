@@ -12,7 +12,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install CPU-only torch/torchvision first (pinned to the versions
+# verified against anomalib==2.6.0 locally) — without this, pip pulls
+# the default GPU wheel with several GB of CUDA runtime libraries
+# (nvidia-cublas, nvidia-cudnn, etc.) that this container never uses,
+# since it only ever runs inference on CPU.
+RUN pip install --no-cache-dir torch==2.13.0 torchvision==0.28.0 --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 

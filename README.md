@@ -285,9 +285,45 @@ with two panels, each independently toggleable from the sidebar:
 
 - **Panel 1 — Known Defects:** annotated feed, red/green alert banner,
   today's defect counts by type, recent detections table.
-- **Panel 2 — Unknown Anomalies:** heatmap feed, 🔴/🟢 status banner with
-  live score, today's scan/abnormal counts + average score, anomaly
-  score trend chart.
+- **Panel 2 — Unknown Anomalies:** original frame next to the heatmap,
+  🔴/🟢 status banner with live score, today's scan/abnormal counts +
+  average score, anomaly score trend chart.
+
+The dashboard's default "Video source" is `dataset/test/images`
+(NEU-DET) — great for demoing Panel 1, but every frame will read as
+"Abnormal, score ~1.0" on Panel 2, since PatchCore only knows what a
+normal *bottle* looks like and steel surface photos are wildly outside
+that domain (not a bug — the model is correctly saying "this isn't a
+bottle at all"). For a Panel 2 demo that actually varies between normal
+and abnormal, point "Video source" at a folder of real bottle images
+instead:
+
+```bash
+# Official per-category download (148 MB), no login required — verified
+# working 2026-08-04; if it 404s, get the current link from
+# https://www.mvtec.com/company/research/datasets/mvtec-ad/downloads
+curl -L -o dataset/mvtec_ad/bottle.tar.xz "https://www.mydrive.ch/shares/150452/132a93367fb17cdf968dfb5c4013f6e7/download/420937370-1629958698/bottle.tar.xz"
+tar -xf dataset/mvtec_ad/bottle.tar.xz -C dataset/mvtec_ad
+chmod -R u+rwX dataset/mvtec_ad/bottle  # archive ships with restrictive permissions
+
+# Flatten test/{good,broken_small,broken_large,contamination} into one
+# folder so it works as a single --source (ImageFolderCapture reads
+# files directly in a folder, not subfolders)
+cd dataset/mvtec_ad/bottle && mkdir -p test_flat
+for d in test/good test/broken_small test/broken_large test/contamination; do
+  label=$(basename "$d")
+  for f in "$d"/*; do cp "$f" "test_flat/${label}_$(basename "$f")"; done
+done
+```
+
+Then set "Video source" to `dataset/mvtec_ad/bottle/test_flat` — 83
+images (20 normal, 63 defective across 3 defect types), scores actually
+vary (`good` images score ~0.3, `broken_large` scores ~1.0), and the
+heatmaps localize onto the real visible damage.
+
+There's no single source that demos both panels meaningfully at once —
+Module 1 only knows steel defects, Module 2 only knows bottles. Pick
+whichever source matches the panel you're showing off.
 
 ## Known limitations (fine for a portfolio MVP, worth calling out if asked)
 
