@@ -100,11 +100,24 @@ python preprocessing/augment.py --images dataset/train/images --labels dataset/t
 
 ### 2. Train
 
+Locally (CPU will work but is slow):
+
 ```bash
 python training/train.py --model yolov8n.pt --epochs 100 --imgsz 640
 ```
 
 Weights land in `models/yolov8/defect_detector/weights/best.pt`.
+
+**Or on Kaggle (free GPU):** upload
+[kaggle/train_yolo_kaggle.ipynb](kaggle/train_yolo_kaggle.ipynb) as a new
+Kaggle notebook, attach the same
+["NEU Surface Defect Database"](https://www.kaggle.com/datasets/kaustubhdikshit/neu-surface-defect-database)
+as an input dataset, set the accelerator to a GPU, and run all cells. It's
+self-contained (no repo cloning, no credentials) — it re-does the VOC→YOLO
+conversion and training inside the notebook. Download `best.pt` from the
+notebook's Output pane afterward and drop it into
+`models/yolov8/defect_detector/weights/best.pt` locally (it's gitignored,
+so this is a manual copy).
 
 ### 3. Evaluate
 
@@ -234,7 +247,7 @@ factory-defect-detection/
 ├── dataset/
 │   ├── train/ validation/ test/   # NEU-DET images+labels, data.yaml
 │   └── mvtec_ad/                  # MVTec AD, auto-downloaded per category
-├── preprocessing/                 # resize.py, normalize.py, augment.py
+├── preprocessing/                 # resize.py, normalize.py, augment.py, voc_to_yolo.py
 ├── models/
 │   ├── yolov8/                    # YOLO training run outputs
 │   └── patchcore/                 # PatchCore checkpoints + exported models
@@ -248,6 +261,7 @@ factory-defect-detection/
 │   └── combined_pipeline.py       # both modules, live
 ├── dashboard/                     # app.py (Streamlit, two panels)
 ├── database/                      # db.py (SQLite/SQLAlchemy)
+├── kaggle/                        # train_yolo_kaggle.ipynb (self-contained GPU training)
 ├── reports/                       # generated analytics output
 └── utils/                         # download_dataset.py (NEU-DET)
 ```
