@@ -26,8 +26,6 @@ from database.db import (
     recent_anomalies,
     recent_detections,
 )
-from inference.detect_anomaly import AnomalyDetector
-from inference.detect_known import KnownDefectDetector
 
 st.set_page_config(page_title="Factory Defect Detection", layout="wide")
 init_db()
@@ -66,13 +64,21 @@ if run_stream:
 
     if enable_known:
         try:
+            from inference.detect_known import KnownDefectDetector
+
             known_detector = KnownDefectDetector(yolo_weights, conf=conf_threshold)
+        except ImportError:
+            st.error("Panel 1 needs `ultralytics` installed (`pip install ultralytics`).")
         except Exception as exc:
             st.error(f"Could not load YOLO weights at '{yolo_weights}': {exc}")
 
     if enable_anomaly:
         try:
+            from inference.detect_anomaly import AnomalyDetector
+
             anomaly_detector = AnomalyDetector(patchcore_weights)
+        except ImportError:
+            st.error("Panel 2 needs `anomalib` installed (`pip install anomalib`) — or uncheck it in the sidebar to run Panel 1 only.")
         except Exception as exc:
             st.error(f"Could not load PatchCore weights at '{patchcore_weights}': {exc}")
 
