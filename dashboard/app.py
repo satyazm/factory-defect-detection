@@ -16,7 +16,8 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
 from database.db import (
     anomaly_stats_today,
     defect_counts_today,
@@ -36,11 +37,18 @@ st.title("Factory Defect Detection — Live Dashboard")
 with st.sidebar:
     st.header("Configuration")
     enable_known = st.checkbox("Panel 1: known-defect detection (YOLO)", value=True)
-    yolo_weights = st.text_input("YOLO weights", "models/yolov8/defect_detector/weights/best.pt")
+    yolo_weights = st.text_input(
+        "YOLO weights", str(REPO_ROOT / "models/yolov8/defect_detector/weights/best.pt")
+    )
     enable_anomaly = st.checkbox("Panel 2: unknown-anomaly detection (PatchCore)", value=True)
-    patchcore_weights = st.text_input("PatchCore weights", "models/patchcore/bottle/weights/torch/model.pt")
+    patchcore_weights = st.text_input(
+        "PatchCore weights", str(REPO_ROOT / "models/patchcore/bottle/weights/torch/model.pt")
+    )
 
-    source = st.text_input("Video source (webcam index / file / RTSP URL / folder of images)", "0")
+    source = st.text_input(
+        "Video source (webcam index / file / RTSP URL / folder of images)",
+        str(REPO_ROOT / "dataset/test/images"),
+    )
     image_delay = st.number_input(
         "Seconds per image (folder sources only)", min_value=0.1, max_value=10.0, value=1.5, step=0.1
     )
@@ -58,7 +66,13 @@ with col_known:
 with col_anomaly:
     st.subheader("Panel 2 — Unknown Anomalies (PatchCore)")
     anomaly_alert_placeholder = st.empty()
-    anomaly_frame_placeholder = st.empty()
+    anomaly_original_col, anomaly_heatmap_col = st.columns(2)
+    with anomaly_original_col:
+        st.caption("Original")
+        anomaly_original_placeholder = st.empty()
+    with anomaly_heatmap_col:
+        st.caption("Anomaly Heatmap")
+        anomaly_frame_placeholder = st.empty()
 
 fps_placeholder = st.empty()
 
@@ -124,6 +138,7 @@ if run_stream:
             else:
                 anomaly_alert_placeholder.success(f"🟢 Normal — score {anomaly_result['score']:.2f}")
 
+            anomaly_original_placeholder.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), channels="RGB")
             anomaly_frame_placeholder.image(cv2.cvtColor(anomaly_result["heatmap"], cv2.COLOR_BGR2RGB), channels="RGB")
 
         now = time.time()
