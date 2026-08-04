@@ -15,9 +15,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--weights", required=True)
     parser.add_argument("--conf", type=float, default=0.5)
-    parser.add_argument("--no-alert", action="store_true")
     args = parser.parse_args()
-    run(args.weights, source="0", conf=args.conf, camera_id="webcam", alert=not args.no_alert)
+    run(args.weights, source="0", conf=args.conf, camera_id="webcam")
 
 
 if __name__ == "__main__":

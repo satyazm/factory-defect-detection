@@ -2,16 +2,16 @@
 
 Real-time industrial defect detection: a camera feed is run through a
 YOLOv8 detector trained on steel surface defects (NEU-DET), detections
-are logged to a database, defects trigger Telegram/email alerts with a
-screenshot, and a Streamlit dashboard shows the live feed plus
-production stats.
+are logged to a database, and a Streamlit dashboard shows the live feed,
+an on-screen defect alert banner, and production stats.
 
 ```
 Camera → OpenCV → YOLOv8 → {bounding boxes, labels, confidence}
                               │
-              ┌───────────────┼────────────────┐
-              ▼               ▼                ▼
-          SQLite DB      Alerts (TG/email)   Streamlit dashboard
+                  ┌───────────┴───────────┐
+                  ▼                       ▼
+              SQLite DB          Streamlit dashboard
+                                  (live feed + alert banner + stats)
 ```
 
 ## Status
@@ -77,10 +77,7 @@ python inference/realtime.py --weights .../best.pt --source path/to/video.mp4
 python inference/realtime.py --weights .../best.pt --source rtsp://user:pass@camera-ip/stream
 ```
 
-Every detection is logged to `database/detections.db`. Defects also
-trigger a rate-limited Telegram/email alert with a saved screenshot —
-copy `alerts/.env.example` to `alerts/.env` and fill in credentials to
-enable that (skipped silently if unset).
+Every detection is logged to `database/detections.db`.
 
 ## 5. Dashboard
 
@@ -88,16 +85,18 @@ enable that (skipped silently if unset).
 streamlit run dashboard/app.py
 ```
 
-Shows the live annotated feed, today's defect counts/charts, and a table
-of recent detections.
+Runs its own live inference loop (independent of `inference/realtime.py`)
+and shows the annotated feed, a red/green defect alert banner per frame,
+today's defect counts/charts, and a table of recent detections.
 
 ## Known limitations (fine for a portfolio MVP, worth calling out if asked)
 
 - The Streamlit live-feed loop blocks Streamlit's normal rerun model
   while streaming; for a production dashboard you'd move capture to a
   background thread or use `streamlit-webrtc`.
-- Alerting is polling/cooldown-based per class (30s), not a full
-  event queue — fine for a demo, not for high-throughput lines.
+- Alerting is in-dashboard only (banner per frame) — no notification
+  fires if nobody has the dashboard open. Fine for a demo/portfolio
+  setting; a real line would still want push alerts (Telegram/email/SMS).
 - SQLite is used for simplicity; swap `database/db.py`'s
   `SQLALCHEMY_URL` for a Postgres DSN to scale beyond single-writer.
 
@@ -119,7 +118,6 @@ factory-defect-detection/
 ├── training/            train.py, evaluate.py
 ├── inference/           realtime.py, webcam.py
 ├── dashboard/           app.py (Streamlit)
-├── alerts/              telegram.py, email.py, .env.example
 ├── database/            db.py (SQLite/SQLAlchemy)
 ├── reports/              generated analytics output
 └── utils/               download_dataset.py

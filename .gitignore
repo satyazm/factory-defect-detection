@@ -19,4 +19,3 @@ runs/
 database/*.db
 reports/*.png
 reports/*.csv
-alerts/screenshots/

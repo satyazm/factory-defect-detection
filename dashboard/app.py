@@ -33,6 +33,8 @@ with st.sidebar:
 col_video, col_stats = st.columns([2, 1])
 
 with col_stats:
+    alert_placeholder = st.empty()
+
     st.subheader("Today's Production Stats")
     counts = defect_counts_today()
     total_defects = sum(counts.values())
@@ -91,11 +93,18 @@ with col_video:
             results = model.predict(frame, conf=conf_threshold, verbose=False)[0]
             annotated = results.plot()
 
+            frame_defects = []
             for box in results.boxes:
                 cls_name = model.names[int(box.cls.item())]
                 confidence = float(box.conf.item())
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
                 log_detection(cls_name, confidence, (x1, y1, x2, y2), camera_id=camera_id)
+                frame_defects.append(f"{cls_name} ({confidence:.0%})")
+
+            if frame_defects:
+                alert_placeholder.error(f"⚠️ Defect detected: {', '.join(frame_defects)}")
+            else:
+                alert_placeholder.success("✅ No defects in current frame")
 
             now = time.time()
             fps = 1.0 / max(now - prev_time, 1e-6)
