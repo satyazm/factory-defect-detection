@@ -190,9 +190,17 @@ python inference/webcam.py --weights .../best.pt
 # Video file or RTSP stream
 python inference/realtime.py --weights .../best.pt --source path/to/video.mp4
 python inference/realtime.py --weights .../best.pt --source rtsp://user:pass@camera-ip/stream
+
+# Folder of images — loops through them indefinitely (sorted by
+# filename, one every --image-delay seconds), for demoing continuous
+# detection without a real camera
+python inference/realtime.py --weights .../best.pt --source dataset/test/images --image-delay 1.5
 ```
 
-Every detection is logged to `database/detections.db`.
+Every detection is logged to `database/detections.db`. The folder-of-images
+source works the same way in `combined_pipeline.py` and the dashboard
+(sidebar → Video source), and is implemented once in
+`inference/video_source.py` so all three share it.
 
 ---
 

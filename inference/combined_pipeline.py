@@ -21,6 +21,11 @@ Usage:
         --patchcore-weights models/patchcore/bottle/weights/torch/model.pt \
         --source 0
 
+--source also accepts a folder of images, which loops through them
+indefinitely — useful for demoing continuous detection without a real
+camera:
+    python inference/combined_pipeline.py --yolo-weights ... --patchcore-weights ... --source dataset/test/images
+
 Displays known-defect boxes on the left and the anomaly heatmap on the
 right. Press 'q' to quit.
 """
@@ -36,19 +41,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from database.db import init_db, log_anomaly, log_detection
 from inference.detect_anomaly import AnomalyDetector
 from inference.detect_known import KnownDefectDetector
+from inference.video_source import open_capture
 
 
-def parse_source(source: str):
-    return int(source) if source.isdigit() else source
-
-
-def run(yolo_weights: str, patchcore_weights: str, source: str, conf: float, camera_id: str) -> None:
+def run(
+    yolo_weights: str,
+    patchcore_weights: str,
+    source: str,
+    conf: float,
+    camera_id: str,
+    image_delay: float = 1.5,
+) -> None:
     init_db()
 
     known_detector = KnownDefectDetector(yolo_weights, conf=conf)
     anomaly_detector = AnomalyDetector(patchcore_weights)
 
-    cap = cv2.VideoCapture(parse_source(source))
+    cap = open_capture(source, image_folder_delay_seconds=image_delay)
     if not cap.isOpened():
         sys.exit(f"Could not open source: {source}")
 
@@ -105,12 +114,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--yolo-weights", required=True, help="path to trained YOLO .pt checkpoint")
     parser.add_argument("--patchcore-weights", required=True, help="path to exported PatchCore model.pt")
-    parser.add_argument("--source", default="0", help="webcam index, video file path, or RTSP URL")
+    parser.add_argument("--source", default="0", help="webcam index, video file path, RTSP URL, or folder of images")
     parser.add_argument("--conf", type=float, default=0.5, help="YOLO confidence threshold")
     parser.add_argument("--camera-id", default="default")
+    parser.add_argument("--image-delay", type=float, default=1.5, help="seconds between frames when --source is a folder of images")
     args = parser.parse_args()
 
-    run(args.yolo_weights, args.patchcore_weights, args.source, args.conf, args.camera_id)
+    run(args.yolo_weights, args.patchcore_weights, args.source, args.conf, args.camera_id, args.image_delay)
 
 
 if __name__ == "__main__":

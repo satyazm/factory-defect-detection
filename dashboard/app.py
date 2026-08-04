@@ -26,6 +26,7 @@ from database.db import (
     recent_anomalies,
     recent_detections,
 )
+from inference.video_source import open_capture
 
 st.set_page_config(page_title="Factory Defect Detection", layout="wide")
 init_db()
@@ -39,7 +40,10 @@ with st.sidebar:
     enable_anomaly = st.checkbox("Panel 2: unknown-anomaly detection (PatchCore)", value=True)
     patchcore_weights = st.text_input("PatchCore weights", "models/patchcore/bottle/weights/torch/model.pt")
 
-    source = st.text_input("Video source (webcam index / file / RTSP URL)", "0")
+    source = st.text_input("Video source (webcam index / file / RTSP URL / folder of images)", "0")
+    image_delay = st.number_input(
+        "Seconds per image (folder sources only)", min_value=0.1, max_value=10.0, value=1.5, step=0.1
+    )
     conf_threshold = st.slider("YOLO confidence threshold", 0.1, 0.95, 0.5, 0.05)
     camera_id = st.text_input("Camera ID", "default")
     run_stream = st.toggle("Start live feed")
@@ -86,8 +90,7 @@ if run_stream:
         st.warning("Enable at least one panel in the sidebar to start streaming.")
         st.stop()
 
-    cap_source = int(source) if source.isdigit() else source
-    cap = cv2.VideoCapture(cap_source)
+    cap = open_capture(source, image_folder_delay_seconds=image_delay)
     if not cap.isOpened():
         st.error(f"Could not open video source: {source}")
         st.stop()
