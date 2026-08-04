@@ -8,10 +8,15 @@ venv/
 dataset/train/*
 dataset/validation/*
 dataset/test/*
+dataset/mvtec_ad/*
 !dataset/**/.gitkeep
 
 # trained weights and run artifacts
 models/**/*.pt
+models/**/*.ckpt
+models/**/lightning_logs/
+models/**/csv/
+models/**/tensorboard/
 runs/
 *.onnx
 

@@ -1,6 +1,9 @@
 """
 Streamlit dashboard: live detection feed + production stats.
 
+Panel 1 — known defects (YOLO, Module 1): "what type of defect is this?"
+Panel 2 — unknown anomalies (PatchCore, Module 2): "does this look abnormal at all?"
+
 Usage:
     streamlit run dashboard/app.py
 """
@@ -12,10 +15,19 @@ import cv2
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from ultralytics import YOLO
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from database.db import defect_counts_today, init_db, log_detection, recent_detections
+from database.db import (
+    anomaly_stats_today,
+    defect_counts_today,
+    init_db,
+    log_anomaly,
+    log_detection,
+    recent_anomalies,
+    recent_detections,
+)
+from inference.detect_anomaly import AnomalyDetector
+from inference.detect_known import KnownDefectDetector
 
 st.set_page_config(page_title="Factory Defect Detection", layout="wide")
 init_db()
@@ -24,95 +36,139 @@ st.title("Factory Defect Detection — Live Dashboard")
 
 with st.sidebar:
     st.header("Configuration")
-    weights_path = st.text_input("Model weights", "models/yolov8/defect_detector/weights/best.pt")
+    enable_known = st.checkbox("Panel 1: known-defect detection (YOLO)", value=True)
+    yolo_weights = st.text_input("YOLO weights", "models/yolov8/defect_detector/weights/best.pt")
+    enable_anomaly = st.checkbox("Panel 2: unknown-anomaly detection (PatchCore)", value=True)
+    patchcore_weights = st.text_input("PatchCore weights", "models/patchcore/bottle/weights/torch/model.pt")
+
     source = st.text_input("Video source (webcam index / file / RTSP URL)", "0")
-    conf_threshold = st.slider("Confidence threshold", 0.1, 0.95, 0.5, 0.05)
+    conf_threshold = st.slider("YOLO confidence threshold", 0.1, 0.95, 0.5, 0.05)
     camera_id = st.text_input("Camera ID", "default")
     run_stream = st.toggle("Start live feed")
 
-col_video, col_stats = st.columns([2, 1])
+col_known, col_anomaly = st.columns(2)
 
-with col_stats:
-    alert_placeholder = st.empty()
+with col_known:
+    st.subheader("Panel 1 — Known Defects (YOLO)")
+    known_alert_placeholder = st.empty()
+    known_frame_placeholder = st.empty()
 
-    st.subheader("Today's Production Stats")
+with col_anomaly:
+    st.subheader("Panel 2 — Unknown Anomalies (PatchCore)")
+    anomaly_alert_placeholder = st.empty()
+    anomaly_frame_placeholder = st.empty()
+
+fps_placeholder = st.empty()
+
+if run_stream:
+    known_detector = None
+    anomaly_detector = None
+
+    if enable_known:
+        try:
+            known_detector = KnownDefectDetector(yolo_weights, conf=conf_threshold)
+        except Exception as exc:
+            st.error(f"Could not load YOLO weights at '{yolo_weights}': {exc}")
+
+    if enable_anomaly:
+        try:
+            anomaly_detector = AnomalyDetector(patchcore_weights)
+        except Exception as exc:
+            st.error(f"Could not load PatchCore weights at '{patchcore_weights}': {exc}")
+
+    if not known_detector and not anomaly_detector:
+        st.warning("Enable at least one panel in the sidebar to start streaming.")
+        st.stop()
+
+    cap_source = int(source) if source.isdigit() else source
+    cap = cv2.VideoCapture(cap_source)
+    if not cap.isOpened():
+        st.error(f"Could not open video source: {source}")
+        st.stop()
+
+    prev_time = time.time()
+    while run_stream:
+        ok, frame = cap.read()
+        if not ok:
+            st.warning("Stream ended or frame grab failed.")
+            break
+
+        if known_detector:
+            known_result = known_detector.predict(frame)
+            for det in known_result["detections"]:
+                log_detection(det["class_name"], det["confidence"], det["bbox"], camera_id=camera_id)
+
+            if known_result["detections"]:
+                labels = ", ".join(f"{d['class_name']} ({d['confidence']:.0%})" for d in known_result["detections"])
+                known_alert_placeholder.error(f"⚠️ Defect detected: {labels}")
+            else:
+                known_alert_placeholder.success("✅ No known defects in current frame")
+
+            known_frame_placeholder.image(cv2.cvtColor(known_result["annotated"], cv2.COLOR_BGR2RGB), channels="RGB")
+
+        if anomaly_detector:
+            anomaly_result = anomaly_detector.predict(frame)
+            log_anomaly(anomaly_result["score"], anomaly_result["is_anomalous"], camera_id=camera_id)
+
+            if anomaly_result["is_anomalous"]:
+                anomaly_alert_placeholder.error(f"🔴 Abnormal — score {anomaly_result['score']:.2f}")
+            else:
+                anomaly_alert_placeholder.success(f"🟢 Normal — score {anomaly_result['score']:.2f}")
+
+            anomaly_frame_placeholder.image(cv2.cvtColor(anomaly_result["heatmap"], cv2.COLOR_BGR2RGB), channels="RGB")
+
+        now = time.time()
+        fps = 1.0 / max(now - prev_time, 1e-6)
+        prev_time = now
+        fps_placeholder.caption(f"FPS: {fps:.1f}")
+
+    cap.release()
+else:
+    st.info("Toggle 'Start live feed' in the sidebar to begin streaming.")
+
+st.divider()
+col_known_stats, col_anomaly_stats = st.columns(2)
+
+with col_known_stats:
+    st.subheader("Today's Known-Defect Stats")
     counts = defect_counts_today()
-    total_defects = sum(counts.values())
-    st.metric("Total Defects Today", total_defects)
+    st.metric("Total Known Defects Today", sum(counts.values()))
 
     if counts:
         df_counts = pd.DataFrame({"defect_type": list(counts.keys()), "count": list(counts.values())})
         fig = px.bar(df_counts, x="defect_type", y="count", title="Defects by Type (Today)")
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("No detections logged yet today.")
+        st.info("No known-defect detections logged yet today.")
 
-    st.subheader("Recent Detections")
     rows = recent_detections(limit=25)
     if rows:
         df_recent = pd.DataFrame(
             [
-                {
-                    "time": r.timestamp,
-                    "camera": r.camera_id,
-                    "class": r.class_name,
-                    "confidence": f"{r.confidence:.0%}",
-                }
+                {"time": r.timestamp, "camera": r.camera_id, "class": r.class_name, "confidence": f"{r.confidence:.0%}"}
                 for r in rows
             ]
         )
         st.dataframe(df_recent, use_container_width=True, hide_index=True)
+
+with col_anomaly_stats:
+    st.subheader("Today's Anomaly Stats")
+    stats = anomaly_stats_today()
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Frames Scanned", stats["total"])
+    m2.metric("Abnormal", stats["abnormal"])
+    m3.metric("Avg Score", f"{stats['avg_score']:.2f}")
+
+    anomaly_rows = recent_anomalies(limit=100)
+    if anomaly_rows:
+        df_anomaly = pd.DataFrame(
+            [
+                {"time": r.timestamp, "camera": r.camera_id, "score": r.anomaly_score, "status": "Abnormal" if r.is_anomalous else "Normal"}
+                for r in reversed(anomaly_rows)
+            ]
+        )
+        fig = px.line(df_anomaly, x="time", y="score", color="status", title="Anomaly Score Trend")
+        st.plotly_chart(fig, use_container_width=True)
+        st.dataframe(df_anomaly.iloc[::-1], use_container_width=True, hide_index=True)
     else:
-        st.info("No detections yet.")
-
-with col_video:
-    st.subheader("Live Feed")
-    frame_placeholder = st.empty()
-    fps_placeholder = st.empty()
-
-    if run_stream:
-        try:
-            model = YOLO(weights_path)
-        except Exception as exc:
-            st.error(f"Could not load model weights at '{weights_path}': {exc}")
-            st.stop()
-
-        cap_source = int(source) if source.isdigit() else source
-        cap = cv2.VideoCapture(cap_source)
-        if not cap.isOpened():
-            st.error(f"Could not open video source: {source}")
-            st.stop()
-
-        prev_time = time.time()
-        while run_stream:
-            ok, frame = cap.read()
-            if not ok:
-                st.warning("Stream ended or frame grab failed.")
-                break
-
-            results = model.predict(frame, conf=conf_threshold, verbose=False)[0]
-            annotated = results.plot()
-
-            frame_defects = []
-            for box in results.boxes:
-                cls_name = model.names[int(box.cls.item())]
-                confidence = float(box.conf.item())
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
-                log_detection(cls_name, confidence, (x1, y1, x2, y2), camera_id=camera_id)
-                frame_defects.append(f"{cls_name} ({confidence:.0%})")
-
-            if frame_defects:
-                alert_placeholder.error(f"⚠️ Defect detected: {', '.join(frame_defects)}")
-            else:
-                alert_placeholder.success("✅ No defects in current frame")
-
-            now = time.time()
-            fps = 1.0 / max(now - prev_time, 1e-6)
-            prev_time = now
-
-            frame_placeholder.image(cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB), channels="RGB")
-            fps_placeholder.caption(f"FPS: {fps:.1f}")
-
-        cap.release()
-    else:
-        st.info("Toggle 'Start live feed' in the sidebar to begin streaming.")
+        st.info("No anomaly detections logged yet today.")

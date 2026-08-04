@@ -9,7 +9,7 @@ import datetime as dt
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import Float, String, DateTime, create_engine, select
+from sqlalchemy import Boolean, Float, String, DateTime, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
 
 DB_PATH = Path(__file__).resolve().parent / "detections.db"
@@ -35,6 +35,18 @@ class Detection(Base):
     bbox_y1: Mapped[float] = mapped_column(Float)
     bbox_x2: Mapped[float] = mapped_column(Float)
     bbox_y2: Mapped[float] = mapped_column(Float)
+    image_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+
+
+class Anomaly(Base):
+    __tablename__ = "anomalies"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    timestamp: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow, index=True)
+    camera_id: Mapped[str] = mapped_column(String(64), default="default")
+    product_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    anomaly_score: Mapped[float] = mapped_column(Float)
+    is_anomalous: Mapped[bool] = mapped_column(Boolean, index=True)
     image_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
 
 
@@ -83,6 +95,43 @@ def defect_counts_today() -> dict[str, int]:
     for row in rows:
         counts[row.class_name] = counts.get(row.class_name, 0) + 1
     return counts
+
+
+def log_anomaly(
+    score: float,
+    is_anomalous: bool,
+    camera_id: str = "default",
+    product_id: str | None = None,
+    image_path: str | None = None,
+) -> None:
+    with Session(_engine) as session:
+        session.add(
+            Anomaly(
+                camera_id=camera_id,
+                product_id=product_id,
+                anomaly_score=score,
+                is_anomalous=is_anomalous,
+                image_path=image_path,
+            )
+        )
+        session.commit()
+
+
+def recent_anomalies(limit: int = 100) -> list[Anomaly]:
+    with Session(_engine) as session:
+        stmt = select(Anomaly).order_by(Anomaly.timestamp.desc()).limit(limit)
+        return list(session.scalars(stmt))
+
+
+def anomaly_stats_today() -> dict:
+    today = dt.datetime.utcnow().date()
+    with Session(_engine) as session:
+        stmt = select(Anomaly).where(Anomaly.timestamp >= dt.datetime.combine(today, dt.time.min))
+        rows = session.scalars(stmt).all()
+    total = len(rows)
+    abnormal = sum(1 for r in rows if r.is_anomalous)
+    avg_score = sum(r.anomaly_score for r in rows) / total if total else 0.0
+    return {"total": total, "abnormal": abnormal, "avg_score": avg_score}
 
 
 if __name__ == "__main__":
