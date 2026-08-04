@@ -13,11 +13,21 @@ Standalone usage (single image):
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import cv2
 import numpy as np
-from anomalib.deploy import TorchInferencer
+
+# anomalib's TorchInferencer loads .pt checkpoints via torch.load/pickle,
+# which can execute arbitrary code, so it refuses to load unless this is
+# set. Safe here specifically because every model.pt this wrapper is
+# pointed at comes from training/train_patchcore.py's own
+# engine.export(..., export_type=ExportType.TORCH) in this repo, not a
+# checkpoint downloaded from an untrusted source.
+os.environ.setdefault("TRUST_REMOTE_CODE", "1")
+
+from anomalib.deploy import TorchInferencer  # noqa: E402
 
 
 def _to_numpy(value):
@@ -33,10 +43,12 @@ class AnomalyDetector:
 
     def predict(self, frame_bgr: np.ndarray) -> dict:
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        # A single image still comes back as a batch of 1 (ImageBatch), so
+        # pred_score/pred_label are shape (1,) rather than scalars.
         result = self.inferencer.predict(image=frame_rgb)
 
-        score = float(_to_numpy(result.pred_score))
-        is_anomalous = bool(_to_numpy(result.pred_label))
+        score = float(_to_numpy(result.pred_score)[0])
+        is_anomalous = bool(_to_numpy(result.pred_label)[0])
         heatmap = self._overlay_heatmap(frame_bgr, _to_numpy(result.anomaly_map))
 
         return {"score": score, "is_anomalous": is_anomalous, "heatmap": heatmap}

@@ -51,8 +51,15 @@ either `best.pt` (YOLO) or `model.pt` (PatchCore) exists.
 
 ## Setup
 
+**Requires Python 3.10+** — `anomalib>=2.6.0` needs it, but silently
+degrades to an ancient, API-incompatible `anomalib 0.7.0` on older
+Python instead of erroring, so a plain `python -m venv` on an old system
+Python can look like it worked and then fail confusingly later. Check
+`python3 --version` first; on macOS, `brew install python@3.11` if
+needed.
+
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -62,6 +69,13 @@ a GPU, install the CUDA build of PyTorch first per the
 [official instructions](https://pytorch.org/get-started/locally/) before
 running `pip install -r requirements.txt`, or the generic CPU wheel will
 be installed instead.
+
+Loading a trained PatchCore checkpoint requires setting
+`TRUST_REMOTE_CODE=1` (handled automatically in `inference/detect_anomaly.py`) —
+anomalib guards `.pt` loading behind this because it uses `pickle` under
+the hood, which can execute arbitrary code. Safe for checkpoints this
+repo trained itself (Kaggle notebook or `training/train_patchcore.py`);
+don't point `AnomalyDetector` at a `.pt` file from an untrusted source.
 
 ---
 
