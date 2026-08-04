@@ -45,9 +45,48 @@ don't.
 
 ## Status
 
-Scaffold + working pipeline code for both modules. Nothing is trained
-yet — you need to pull each dataset and run its training script before
-either `best.pt` (YOLO) or `model.pt` (PatchCore) exists.
+Both modules trained and verified end to end (Kaggle GPU for training,
+local CPU for inference/dashboard) — see Results below.
+
+## Results
+
+**Module 1 — YOLOv8n on NEU-DET, 100 epochs, held-out test split (90 images):**
+
+| Class | Precision | Recall | mAP50 | mAP50-95 |
+|---|---|---|---|---|
+| crazing | 0.667 | 0.154 | 0.439 | 0.190 |
+| inclusion | 0.862 | 0.800 | 0.850 | 0.448 |
+| patches | 0.843 | 0.868 | 0.941 | 0.590 |
+| pitted_surface | 0.877 | 0.842 | 0.893 | 0.447 |
+| rolled-in_scale | 0.541 | 0.517 | 0.574 | 0.231 |
+| scratches | 0.548 | 0.778 | 0.716 | 0.359 |
+| **all (mean)** | **0.723** | **0.660** | **0.736** | **0.378** |
+
+`crazing` is the clear weak point — recall of 0.154 means it's missing
+most crazing instances on test. Not a bug: crazing defects are diffuse,
+low-contrast crack networks rather than a compact shape, and they're the
+hardest class in every published NEU-DET benchmark, not just this run.
+Worth naming directly in a writeup rather than only reporting the mean.
+
+**Module 2 — PatchCore on MVTec AD `bottle`, single-pass coreset training:**
+
+| Metric | Score |
+|---|---|
+| image_AUROC | 1.000 |
+| image_F1Score | 0.992 |
+| pixel_AUROC | 0.986 |
+| pixel_F1Score | 0.725 |
+
+`image_AUROC = 1.0` looks like overfitting at first glance but isn't —
+`bottle` is one of MVTec AD's easiest categories and PatchCore's
+original paper reports ~100% image-AUROC on it too, so this matches the
+published benchmark rather than being specific to this run. The
+pixel-level F1 being lower than the image-level scores is the normal
+pattern: localizing *which pixels* are anomalous is harder than just
+flagging *whether* the image is anomalous at all.
+
+Reproduce with `training/evaluate.py --split test` and
+`training/evaluate_patchcore.py --category bottle` (see below).
 
 ## Setup
 
