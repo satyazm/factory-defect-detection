@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# dataset (too large for git, download separately — see README)
+dataset/train/*
+dataset/validation/*
+dataset/test/*
+!dataset/**/.gitkeep
+
+# trained weights and run artifacts
+models/**/*.pt
+runs/
+*.onnx
+
+# runtime outputs
+database/*.db
+reports/*.png
+reports/*.csv
+alerts/screenshots/
