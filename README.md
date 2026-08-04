@@ -294,7 +294,7 @@ with two panels, each independently toggleable from the sidebar:
 - SQLite is used for simplicity; swap `database/db.py`'s
   `SQLALCHEMY_URL` for a Postgres DSN to scale beyond single-writer.
 
-## Possible extensions (for a stronger M.Tech writeup)
+## Possible extensions (to make the portfolio story stronger)
 
 - Compare PatchCore against EfficientAD or FastFlow on the same MVTec
   category (accuracy vs inference latency tradeoff).
