@@ -2,21 +2,28 @@
 Fetch the NEU-DET (steel surface defect) dataset in YOLO format and lay it
 out under dataset/{train,validation,test}/{images,labels}.
 
-NEU-DET has no single stable public download URL, so this script supports
-two sources you point it at explicitly rather than guessing one for you:
+NEU-DET has no single stable public download URL, so pick whichever of
+these fits how you already have (or want) access:
 
-1. Roboflow Universe (recommended — already in YOLOv8 txt format)
+1. Manual Kaggle download (no API token needed — verified working)
+   - Download the "NEU Surface Defect Database" zip by hand from
+     https://www.kaggle.com/datasets/kaustubhdikshit/neu-surface-defect-database
+     (just needs you logged into Kaggle in the browser) and unzip it.
+   - It ships as PASCAL VOC XML annotations under train/validation only
+     (no test split). Convert + carve out a test split with:
+       python preprocessing/voc_to_yolo.py --source ~/Downloads/NEU-DET
+
+2. Roboflow Universe (already in YOLOv8 txt format, needs an API key)
    - Create a free account at https://roboflow.com, search "NEU-DET",
      and grab your workspace API key from Settings > API Keys.
    - Run:
        export ROBOFLOW_API_KEY=your_key_here
        python utils/download_dataset.py --source roboflow --project neu-det --version 1
 
-2. Kaggle (raw NEU-DET, PASCAL VOC XML annotations — needs conversion)
+3. Kaggle CLI (scripted download of the same dataset as option 1)
    - Set up the Kaggle CLI (~/.kaggle/kaggle.json), then run:
-       python utils/download_dataset.py --source kaggle --dataset <kaggle-dataset-slug>
-   - You will still need to convert VOC XML to YOLO txt; see
-     preprocessing/voc_to_yolo.py (not included by default — ask if you need it).
+       python utils/download_dataset.py --source kaggle --dataset kaustubhdikshit/neu-surface-defect-database
+   - Then convert with preprocessing/voc_to_yolo.py as in option 1.
 
 Either way, the end result should be:
   dataset/train/images/*.jpg      dataset/train/labels/*.txt
@@ -71,8 +78,8 @@ def download_kaggle(dataset_slug: str) -> None:
     raw_dir.mkdir(parents=True, exist_ok=True)
     kaggle.api.dataset_download_files(dataset_slug, path=str(raw_dir), unzip=True)
     print(f"Downloaded raw NEU-DET files to {raw_dir}.")
-    print("These are PASCAL VOC XML annotations — convert them to YOLO txt "
-          "before training (see docstring at top of this file).")
+    print(f"These are PASCAL VOC XML annotations — convert them with:\n"
+          f"  python preprocessing/voc_to_yolo.py --source {raw_dir}")
 
 
 def main():

@@ -71,20 +71,26 @@ be installed instead.
 
 NEU-DET (6 steel surface defect classes: crazing, inclusion, patches,
 pitted_surface, rolled-in_scale, scratches) has no single canonical
-download URL. Use one of:
+download URL. **Verified working path:** download the
+["NEU Surface Defect Database"](https://www.kaggle.com/datasets/kaustubhdikshit/neu-surface-defect-database)
+zip by hand from Kaggle (just needs you logged into Kaggle in the
+browser, no API token) and convert its PASCAL VOC XML annotations:
 
 ```bash
-# Option A: Roboflow Universe, already in YOLO format
-export ROBOFLOW_API_KEY=your_key
-python utils/download_dataset.py --source roboflow --project neu-det --version 1
-
-# Option B: Kaggle raw NEU-DET (VOC XML — needs conversion, see the
-# docstring in utils/download_dataset.py)
-python utils/download_dataset.py --source kaggle --dataset <kaggle-slug>
+python preprocessing/voc_to_yolo.py --source ~/Downloads/NEU-DET
 ```
 
-This populates `dataset/{train,validation,test}/{images,labels}`, matching
-the layout declared in `dataset/data.yaml`.
+This ships as `train`/`validation` only (no test split) with per-class
+image folders and a flat `annotations/` folder of matching XML files.
+The script converts VOC bounding boxes to YOLO txt and carves a test
+split out of validation (1 in 4 images per class, so validation and test
+stay disjoint), skipping any image/annotation that doesn't have a match
+on the other side. See `utils/download_dataset.py`'s docstring for two
+alternative sources (Roboflow with an API key, or the Kaggle CLI) if you
+want to script the download step too.
+
+Either way, the result populates `dataset/{train,validation,test}/{images,labels}`,
+matching the layout declared in `dataset/data.yaml`.
 
 Optionally expand a thin class with offline augmentation:
 
